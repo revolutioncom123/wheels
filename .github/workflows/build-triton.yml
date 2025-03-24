@@ -21,7 +21,7 @@ on:
 
 jobs:
   build-triton:
-    runs-on: windows-latest
+    runs-on: windows-large
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -35,6 +35,9 @@ jobs:
         shell: pwsh
         run: |
           # Get-ChildItem Env:
+          # (Get-WmiObject Win32_Processor).Name
+          # (Get-WmiObject Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB
+          # (Get-WmiObject Win32_VideoController).Name
 
           # Get-Command -All python
           # python --version
