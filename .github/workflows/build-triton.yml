@@ -34,10 +34,10 @@ jobs:
       - name: Build Triton
         shell: pwsh
         run: |
-          Get-ChildItem Env:
+          # Get-ChildItem Env:
 
-          Get-Command -All python
-          python --version
+          # Get-Command -All python
+          # python --version
           python -m pip install --upgrade pip
           pip install --upgrade cibuildwheel
 
