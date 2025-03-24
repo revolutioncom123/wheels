@@ -79,6 +79,8 @@ jobs:
           $Env:SAGEATTENTION_WHEEL_VERSION_SUFFIX = "+cu12${{ inputs.cuda_minor }}torch2.${{ inputs.torch_minor }}.${{ inputs.torch_patch }}"
           $Env:CIBW_BUILD = "{cp3${{ inputs.python_minor }}-win_amd64,}"
           $Env:CIBW_BUILD_VERBOSITY = "1"
+          # torch may conflict with cibuildwheel's pinned dependency versions
+          $Env:CIBW_DEPENDENCY_VERSIONS = "latest"
           cibuildwheel .
 
       - uses: actions/upload-artifact@v4
