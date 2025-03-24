@@ -70,10 +70,12 @@ jobs:
           cd SageAttention
           git rev-parse HEAD
 
+          $Env:CUDA_MINOR_VERSION = "${{ inputs.cuda_minor }}"
+          $Env:TORCH_MINOR_VERSION = "${{ inputs.torch_minor }}"
+          $Env:TORCH_PATCH_VERSION = "${{ inputs.torch_patch }}"
           $Env:SAGEATTENTION_CUDA_ARCH_LIST = "8.0 8.6 8.9 9.0"
           $Env:CIBW_BUILD = "{cp3${{ inputs.python_minor }}-win_amd64,}"
           $Env:CIBW_BUILD_VERBOSITY = "1"
-          $Env:CIBW_BEFORE_BUILD = "python -m pip install torch==2.${{ inputs.torch_minor }}.${{ inputs.torch_patch }} --index-url https://download.pytorch.org/whl/cu12${{ inputs.cuda_minor }}"
           cibuildwheel .
 
       - uses: actions/upload-artifact@v4
