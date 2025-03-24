@@ -1,0 +1,81 @@
+name: Build SageAttention
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_tag:
+        description: Git tag
+        required: true
+        type: string
+        default: main
+      python_minor:
+        description: Python minor version
+        required: true
+        type: string
+        default: '12'
+      python_patch:
+        description: Python patch version
+        required: true
+        type: string
+        default: '9'
+      torch_minor:
+        description: PyTorch minor version
+        required: true
+        type: string
+        default: '6'
+      torch_patch:
+        description: PyTorch patch version
+        required: true
+        type: string
+        default: '0'
+      cuda_minor:
+        description: CUDA minor version
+        required: true
+        type: string
+        default: '6'
+      cuda_patch:
+        description: CUDA patch version
+        required: true
+        type: string
+        default: '3'
+
+jobs:
+  build-sageattn:
+    runs-on: windows-large
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.${{ inputs.python_minor }}.${{ inputs.python_patch }}
+
+      - uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: 12.${{ inputs.cuda_minor }}.${{ inputs.cuda_patch }}
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build wheel
+        shell: pwsh
+        run: |
+          # Get-ChildItem Env:
+          # (Get-WmiObject Win32_Processor).Name
+          # (Get-WmiObject Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB
+          # (Get-WmiObject Win32_VideoController).Name
+
+          # Get-Command -All python
+          # python --version
+          python -m pip install --upgrade pip
+          pip install --upgrade cibuildwheel
+
+          git clone --branch ${{ inputs.git_tag }} --depth 1 https://github.com/woct0rdho/SageAttention.git
+          cd SageAttention
+          git rev-parse HEAD
+
+          $Env:SAGEATTENTION_CUDA_ARCH_LIST = "8.0 8.6 8.9 9.0"
+          $Env:CIBW_BUILD = "{cp3${{ inputs.python_minor }}-win_amd64,}"
+          $Env:CIBW_BUILD_VERBOSITY = "1"
+          $Env:CIBW_BEFORE_BUILD = "python -m pip install torch==2.${{ inputs.torch_minor }}.${{ inputs.torch_patch }} --index-url https://download.pytorch.org/whl/cu12${{ inputs.cuda_minor }}"
+          cibuildwheel .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          path: SageAttention/wheelhouse/*
