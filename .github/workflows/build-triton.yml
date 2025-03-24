@@ -39,7 +39,7 @@ jobs:
           Get-Command -All python
           python --version
           python -m pip install --upgrade pip
-          pip install --upgrade cibuildwheel pybind11 setuptools
+          pip install --upgrade cibuildwheel
 
           git clone --branch ${{ inputs.git_tag }} --depth 1 https://github.com/woct0rdho/triton-windows.git
           cd triton-windows
