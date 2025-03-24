@@ -21,7 +21,7 @@ on:
 
 jobs:
   build-triton:
-    runs-on: windows-large
+    runs-on: windows-x64-gpu
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -31,7 +31,7 @@ jobs:
 
       - uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build Triton
+      - name: Build wheel
         shell: pwsh
         run: |
           # Get-ChildItem Env:
@@ -58,3 +58,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           path: triton-windows/wheelhouse/*
+
+      - name: Unit test
+        shell: pwsh
+        run: |
+          pip install --upgrade numpy pytest-xdist scipy
+          pip install --pre --upgrade torch --index-url https://download.pytorch.org/whl/nightly/cu128
+          cd triton-windows/wheelhouse
+          pip install $(Get-ChildItem | Select-Object -First 1)
+          cd ../python/test/unit
+          pytest -n 8 -s
