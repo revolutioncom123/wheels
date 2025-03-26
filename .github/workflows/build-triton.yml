@@ -13,11 +13,6 @@ on:
         required: true
         type: string
         default: '12'
-      python_patch:
-        description: Python patch version
-        required: true
-        type: string
-        default: '9'
 
 jobs:
   build-triton:
@@ -25,7 +20,7 @@ jobs:
     steps:
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.${{ inputs.python_minor }}.${{ inputs.python_patch }}
+          python-version: 3.${{ inputs.python_minor }}
 
       # - uses: Jimver/cuda-toolkit@v0.2.22
 
