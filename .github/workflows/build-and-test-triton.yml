@@ -24,7 +24,16 @@ jobs:
 
       # - uses: Jimver/cuda-toolkit@v0.2.22
 
+      # We need Visual Studio 2022 (MSVC v143) to compile Triton
+      # But it's not on the runner windows-x64-gpu by default
+      - name: Install Visual Studio 2022
+        shell: powershell
+        run: |
+          winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --quiet --add ProductLang En-us --add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended"
+
       - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          vsversion: '2022'
 
       - name: Build wheel
         shell: powershell
