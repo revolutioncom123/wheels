@@ -32,7 +32,7 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build wheel
-        shell: pwsh
+        shell: powershell
         run: |
           # Get-ChildItem Env:
           # (Get-WmiObject Win32_Processor).Name
@@ -60,7 +60,7 @@ jobs:
           path: triton-windows/wheelhouse/*
 
       - name: Unit test
-        shell: pwsh
+        shell: powershell
         run: |
           pip install --upgrade numpy pytest-xdist scipy
           pip install --pre --upgrade torch --index-url https://download.pytorch.org/whl/nightly/cu128
