@@ -1,4 +1,4 @@
-name: Build Triton
+name: Build and Test Triton
 
 on:
   workflow_dispatch:
@@ -15,8 +15,8 @@ on:
         default: '12'
 
 jobs:
-  build-triton:
-    runs-on: windows-large
+  build-and-test-triton:
+    runs-on: windows-x64-gpu
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -53,3 +53,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           path: triton-windows/wheelhouse/*
+
+      - name: Unit test
+        shell: powershell
+        run: |
+          pip install --upgrade numpy pytest-xdist scipy
+          pip install --pre --upgrade torch --index-url https://download.pytorch.org/whl/nightly/cu128
+          cd triton-windows/wheelhouse
+          pip install $(Get-ChildItem | Select-Object -First 1)
+          cd ../python/test/unit
+          pytest -n 8 -s
