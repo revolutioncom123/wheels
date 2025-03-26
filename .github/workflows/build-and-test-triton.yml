@@ -29,7 +29,7 @@ jobs:
       - name: Install Visual Studio 2022
         shell: powershell
         run: |
-          winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --quiet --add ProductLang En-us --add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended"
+          choco install visualstudio2022buildtools -y --package-parameters "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.Windows10SDK --includeRecommended --addProductLang En-us"
 
       - uses: ilammy/msvc-dev-cmd@v1
         with:
