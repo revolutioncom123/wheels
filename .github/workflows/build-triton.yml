@@ -8,11 +8,10 @@ on:
         required: true
         type: string
         default: main-windows
-      python_minor:
-        description: Python minor version
-        required: true
+      triton_wheel_version_suffix:
+        description: Triton wheel version suffix
+        required: false
         type: string
-        default: '12'
 
 jobs:
   build-triton:
@@ -20,7 +19,7 @@ jobs:
     steps:
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.${{ inputs.python_minor }}
+          python-version: '3.12'
 
       # - uses: Jimver/cuda-toolkit@v0.2.22
 
@@ -46,7 +45,8 @@ jobs:
           $Env:TRITON_BUILD_BINARY = "0"
           $Env:TRITON_BUILD_PROTON = "0"
           $Env:TRITON_BUILD_UT = "0"
-          $Env:CIBW_BUILD = "{cp3${{ inputs.python_minor }}-win_amd64,}"
+          $Env:TRITON_WHEEL_VERSION_SUFFIX = "${{ inputs.triton_wheel_version_suffix }}"
+          $Env:CIBW_BUILD = "{cp39-win_amd64,cp310-win_amd64,cp311-win_amd64,cp312-win_amd64,cp313-win_amd64}"
           $Env:CIBW_BUILD_VERBOSITY = "1"
           cibuildwheel python
 
