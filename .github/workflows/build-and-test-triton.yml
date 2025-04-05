@@ -1,3 +1,6 @@
+# This workflow does not clean caches before building,
+# so the wheel may contain __pycache__ or files from another branch
+
 name: Build and Test Triton
 
 on:
@@ -13,27 +16,26 @@ on:
         required: true
         type: string
         default: '12'
+      pytest_args:
+        description: pytest args
+        required: true
+        type: string
+        default: '-n 0 -s --tb=short'
 
 jobs:
   build-and-test-triton:
-    runs-on: windows-x64-gpu
+    runs-on: windows-a10
     steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.${{ inputs.python_minor }}
-
-      # - uses: Jimver/cuda-toolkit@v0.2.22
-
-      # We need Visual Studio 2022 (MSVC v143) to compile Triton
-      # But it's not on the runner windows-x64-gpu by default
-      - name: Install Visual Studio 2022
+      - name: Create venv
         shell: powershell
         run: |
-          choco install visualstudio2022buildtools -y --package-parameters "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.Windows10SDK --includeRecommended --addProductLang En-us"
+          pip install --upgrade uv
+          uv venv .venv-cp3${{ inputs.python_minor }} --python 3.${{ inputs.python_minor }}
+          .venv-cp3${{ inputs.python_minor }}\Scripts\activate.ps1
+          python -m ensurepip --upgrade
+          python -m pip install --upgrade pip
 
       - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          vsversion: '2022'
 
       - name: Build wheel
         shell: powershell
@@ -43,13 +45,24 @@ jobs:
           # (Get-WmiObject Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB
           # (Get-WmiObject Win32_VideoController).Name
 
+          .venv-cp3${{ inputs.python_minor }}\Scripts\activate.ps1
           # Get-Command -All python
           # python --version
-          python -m pip install --upgrade pip
-          pip install --upgrade cibuildwheel
+          python -m pip install --upgrade cibuildwheel
 
-          git clone --branch ${{ inputs.git_tag }} --depth 1 https://github.com/woct0rdho/triton-windows.git
-          cd triton-windows
+          if (Test-Path -Path triton-windows)
+          {
+            cd triton-windows
+            git add .
+            git reset --hard HEAD
+            git fetch origin ${{ inputs.git_tag }} --depth 1
+            git checkout FETCH_HEAD -B ${{ inputs.git_tag }}
+          }
+          else
+          {
+            git clone --branch ${{ inputs.git_tag }} --depth 1 https://github.com/woct0rdho/triton-windows.git
+            cd triton-windows
+          }
           git rev-parse HEAD
 
           $Env:TRITON_BUILD_BINARY = "0"
@@ -57,6 +70,7 @@ jobs:
           $Env:TRITON_BUILD_UT = "0"
           $Env:CIBW_BUILD = "{cp3${{ inputs.python_minor }}-win_amd64,}"
           $Env:CIBW_BUILD_VERBOSITY = "1"
+          rm wheelhouse/*
           cibuildwheel python
 
       - uses: actions/upload-artifact@v4
@@ -66,9 +80,11 @@ jobs:
       - name: Unit test
         shell: powershell
         run: |
-          pip install --upgrade numpy pytest-xdist scipy
-          pip install --pre --upgrade torch --index-url https://download.pytorch.org/whl/nightly/cu128
+          .venv-cp3${{ inputs.python_minor }}\Scripts\activate.ps1
+          python -m pip install --upgrade numpy pytest-xdist scipy
+          python -m pip install --pre --upgrade 'torch<2.8' --index-url https://download.pytorch.org/whl/nightly/cu128
           cd triton-windows/wheelhouse
-          pip install $(Get-ChildItem | Select-Object -First 1)
+          python -m pip install $(Get-ChildItem | Select-Object -First 1)
+          rm -r ~/.triton/cache
           cd ../python/test/unit
-          pytest -n 8 -s
+          pytest ${{ inputs.pytest_args }}
