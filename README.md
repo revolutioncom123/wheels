@@ -9,7 +9,7 @@ The workflow 'Build and Test Triton' runs all unit tests. It requires a self-hos
 
 ## Build SageAttention
 
-1. Run the workflow 'Build SageAttention'. We support `torch2.5.1+cu124` and `torch2.6.0+cu126` as of now
+1. Run the workflow 'Build SageAttention'. We support torch 2.5.1 + CUDA 12.4.1 and torch 2.6.0 + CUDA 12.6.3 as of now
 2. Download the artifacts
 3. Do some sanity checks locally
 4. Upload the wheels to GitHub releases
