@@ -61,6 +61,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade cibuildwheel simpleindex
 
+          git config --global core.autocrlf false
           git clone --branch ${{ inputs.git_tag }} --depth 1 https://github.com/woct0rdho/SageAttention.git
           cd SageAttention
           git rev-parse HEAD
