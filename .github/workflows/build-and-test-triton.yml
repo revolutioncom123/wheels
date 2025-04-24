@@ -72,7 +72,14 @@ jobs:
           $Env:CIBW_BUILD = "{cp3${{ inputs.python_minor }}-win_amd64,}"
           $Env:CIBW_BUILD_VERBOSITY = "1"
           rm wheelhouse/*
-          cibuildwheel python
+          if (Test-Path -Path setup.py)
+          {
+            cibuildwheel .
+          }
+          else
+          {
+            cibuildwheel python
+          }
 
       - uses: actions/upload-artifact@v4
         with:
