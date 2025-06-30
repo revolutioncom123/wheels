@@ -21,7 +21,7 @@ on:
         description: Build Proton
         required: true
         type: string
-        default: '0'
+        default: '1'
       triton_build_ut:
         description: Build C++ unit tests
         required: true
