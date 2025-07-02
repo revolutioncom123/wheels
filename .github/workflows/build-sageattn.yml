@@ -43,6 +43,11 @@ on:
         required: true
         type: string
         default: ''
+      is_python_abi3:
+        description: Is Python ABI3
+        required: true
+        type: string
+        default: ''
 
 jobs:
   build-sageattn:
@@ -96,13 +101,20 @@ jobs:
           $Env:SAGEATTENTION_CUDA_ARCH_LIST += "${{ inputs.extra_cuda_arch }}"
           $Env:SAGEATTENTION_WHEEL_VERSION_SUFFIX = "+cu12${{ inputs.cuda_minor }}torch2.${{ inputs.torch_minor }}.${{ inputs.torch_patch }}"
           $Env:SAGEATTENTION_WHEEL_VERSION_SUFFIX += "${{ inputs.extra_wheel_version_suffix }}"
-          if ($Env:TORCH_MINOR_VERSION -gt "5")
+          if ("${{ inputs.is_python_abi3 }}")
           {
-            $Env:CIBW_BUILD = "{cp39-win_amd64,cp310-win_amd64,cp311-win_amd64,cp312-win_amd64,cp313-win_amd64}"
+            $Env:CIBW_BUILD = "{cp39-win_amd64,}"
           }
           else
           {
-            $Env:CIBW_BUILD = "{cp39-win_amd64,cp310-win_amd64,cp311-win_amd64,cp312-win_amd64}"
+            if ($Env:TORCH_MINOR_VERSION -gt "5")
+            {
+              $Env:CIBW_BUILD = "{cp39-win_amd64,cp310-win_amd64,cp311-win_amd64,cp312-win_amd64,cp313-win_amd64}"
+            }
+            else
+            {
+              $Env:CIBW_BUILD = "{cp39-win_amd64,cp310-win_amd64,cp311-win_amd64,cp312-win_amd64}"
+            }
           }
           $Env:CIBW_BUILD_VERBOSITY = "1"
           # torch may conflict with cibuildwheel's pinned dependency versions
