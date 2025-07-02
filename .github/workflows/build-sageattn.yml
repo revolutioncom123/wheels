@@ -34,7 +34,12 @@ on:
         type: string
         default: '3'
       extra_cuda_arch:
-        description: Extra CUDA arch 
+        description: Extra CUDA arch
+        required: true
+        type: string
+        default: ''
+      extra_wheel_version_suffix:
+        description: Extra wheel version suffix
         required: true
         type: string
         default: ''
@@ -90,6 +95,7 @@ jobs:
           }
           $Env:SAGEATTENTION_CUDA_ARCH_LIST += "${{ inputs.extra_cuda_arch }}"
           $Env:SAGEATTENTION_WHEEL_VERSION_SUFFIX = "+cu12${{ inputs.cuda_minor }}torch2.${{ inputs.torch_minor }}.${{ inputs.torch_patch }}"
+          $Env:SAGEATTENTION_WHEEL_VERSION_SUFFIX += "${{ inputs.extra_wheel_version_suffix }}"
           if ($Env:TORCH_MINOR_VERSION -gt "5")
           {
             $Env:CIBW_BUILD = "{cp39-win_amd64,cp310-win_amd64,cp311-win_amd64,cp312-win_amd64,cp313-win_amd64}"
