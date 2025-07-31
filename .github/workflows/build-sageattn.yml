@@ -12,12 +12,12 @@ on:
         description: PyTorch minor version
         required: true
         type: string
-        default: '6'
+        default: '7'
       torch_patch:
         description: PyTorch patch version
         required: true
         type: string
-        default: '0'
+        default: '1'
       torch_is_nightly:
         description: PyTorch is nightly
         required: true
@@ -27,12 +27,12 @@ on:
         description: CUDA minor version
         required: true
         type: string
-        default: '6'
+        default: '8'
       cuda_patch:
         description: CUDA patch version
         required: true
         type: string
-        default: '3'
+        default: '1'
       extra_cuda_arch:
         description: Extra CUDA arch
         required: true
