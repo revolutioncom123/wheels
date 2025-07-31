@@ -35,17 +35,17 @@ on:
         default: '1'
       extra_cuda_arch:
         description: Extra CUDA arch
-        required: true
+        required: false
         type: string
         default: ''
       extra_wheel_version_suffix:
         description: Extra wheel version suffix
-        required: true
+        required: false
         type: string
         default: ''
       is_python_abi3:
         description: Is Python ABI3
-        required: true
+        required: false
         type: string
         default: ''
 
