@@ -57,13 +57,23 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install MSVC v14.42
+        shell: powershell
+        run: |
+          Invoke-WebRequest -Uri https://github.com/Data-Oriented-House/PortableBuildTools/releases/download/v2.10.2/PortableBuildTools.exe -OutFile .\PortableBuildTools.exe
+          .\PortableBuildTools.exe accept_license msvc=14.42.17.12 sdk=26100 target=x64 host=x64 env=none path="C:\BuildTools"
+          C:\BuildTools\devcmd.ps1
+          Get-ChildItem Env:
+
+      # - uses: ilammy/msvc-dev-cmd@v1
+      #   with:
+      #     toolset: 14.42
+
       - uses: Jimver/cuda-toolkit@v0.2.22
         with:
           cuda: 12.${{ inputs.cuda_minor }}.${{ inputs.cuda_patch }}
           use-github-cache: false
           use-local-cache: false
-
-      - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build wheel
         shell: powershell
