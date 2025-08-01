@@ -64,6 +64,8 @@ jobs:
           use-local-cache: false
 
       - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          toolset: 14.43
 
       - name: Build wheel
         shell: powershell
