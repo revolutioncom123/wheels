@@ -57,23 +57,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install MSVC v14.42
-        shell: powershell
-        run: |
-          $vsInstaller = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe"
-          $vsWhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = (& $vsWhere -latest -property installationPath)
-          & $vsInstaller modify --installPath "$vsPath" --add Microsoft.VisualStudio.Component.VC.14.42.17.12.x86.x64 --quiet --norestart --wait
-
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          toolset: 14.42
-
       - uses: Jimver/cuda-toolkit@v0.2.22
         with:
           cuda: 12.${{ inputs.cuda_minor }}.${{ inputs.cuda_patch }}
           use-github-cache: false
           use-local-cache: false
+
+      - uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build wheel
         shell: powershell
