@@ -62,7 +62,7 @@ jobs:
           $Env:TRITON_BUILD_PROTON = "${{ inputs.triton_build_proton }}"
           $Env:TRITON_BUILD_UT = "${{ inputs.triton_build_ut }}"
           $Env:TRITON_WHEEL_VERSION_SUFFIX = "${{ inputs.triton_wheel_version_suffix }}"
-          $Env:CIBW_BUILD = "{cp39-win_amd64,cp310-win_amd64,cp311-win_amd64,cp312-win_amd64,cp313-win_amd64}"
+          $Env:CIBW_BUILD = "cp3{10,11,12,13,14}-win_amd64"
           $Env:CIBW_BUILD_VERBOSITY = "1"
           if (Test-Path -Path setup.py)
           {
