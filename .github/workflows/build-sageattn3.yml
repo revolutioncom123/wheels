@@ -86,8 +86,10 @@ jobs:
 
           git config --global core.autocrlf false
           git clone --branch ${{ inputs.git_tag }} --depth 1 https://github.com/woct0rdho/SageAttention.git
-          cd SageAttention/sageattention3_blackwell
+          cd SageAttention
           git rev-parse HEAD
+          git submodule update --init --recursive
+          cd sageattention3_blackwell
 
           $Env:CUDA_MAJOR_VERSION = "${{ inputs.cuda_major }}"
           $Env:CUDA_MINOR_VERSION = "${{ inputs.cuda_minor }}"
