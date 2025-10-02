@@ -1,4 +1,5 @@
 name: Build SageAttention
+runs-on: self-hosted
 
 on:
   workflow_dispatch:
@@ -141,5 +142,6 @@ jobs:
           cibuildwheel .
       
       - uses: actions/upload-artifact@v4
+      
         with:
           path: SageAttention/wheelhouse/*
