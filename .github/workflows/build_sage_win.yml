@@ -1,0 +1,135 @@
+name: Build SageAttention 2.2 GPT (Windows • cu129 • Py3.13 • Torch 2.8)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sage_repo:
+        description: "Upstream SageAttention repository"
+        required: false
+        default: "thu-ml/SageAttention"
+      sage_ref:
+        description: "Ref in upstream repo (branch/tag/sha). Use 'main' for 2.2 code."
+        required: false
+        default: "main"
+      wheel_suffix:
+        description: "Optional wheel filename suffix (e.g. +rev1)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-win-cu129:
+    name: Build wheel (Windows, CUDA 12.9.0, Py3.13, Torch 2.8.0+cu129)
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    env:
+      PYTHON_VERSION: "3.13.7"
+      CUDA_VERSION: "12.9.0"
+      TORCH_VERSION: "2.8.0"
+      TORCH_CUDA_TAG: "cu129"
+
+      # Ada (RTX 4090) = SM 8.9. Add +PTX if you want forward-compat PTX embedded.
+      TORCH_CUDA_ARCH_LIST: "8.9"
+      FORCE_CUDA: "1"
+
+      # Speed up compilation a bit
+      EXT_PARALLEL: "4"
+      NVCC_APPEND_FLAGS: "--threads 8"
+      MAX_JOBS: "8"
+      CMAKE_GENERATOR: "Ninja"
+
+      EXTRA_WHEEL_SUFFIX: "${{ inputs.wheel_suffix }}"
+
+    steps:
+      # 1) Checkout YOUR repo (for this workflow and to store artifacts)
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2) Checkout the UPSTREAM SageAttention source separately
+      - name: Checkout SageAttention upstream
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.sage_repo }}
+          ref: ${{ inputs.sage_ref }}
+          path: SageAttention
+          fetch-depth: 1
+
+      # 3) Python 3.13.7
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          check-latest: true
+          cache: "pip"
+
+      # 4) CUDA 12.9.0 (adds CUDA_PATH and nvcc to PATH)
+      - name: Install CUDA Toolkit ${{ env.CUDA_VERSION }}
+        uses: Jimver/cuda-toolkit@v0.2.25
+        with:
+          cuda: ${{ env.CUDA_VERSION }}
+
+      # 5) MSVC build env (VS 2022 is on the runner)
+      - name: Set up MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Show toolchain versions
+        shell: powershell
+        run: |
+          python --version
+          nvcc --version
+          cl 2>$null | Select-Object -First 1
+          echo "CUDA_PATH=$Env:CUDA_PATH"
+          echo "TORCH_CUDA_ARCH_LIST=$Env:TORCH_CUDA_ARCH_LIST"
+
+      # 6) Build tooling
+      - name: Upgrade build tooling
+        run: |
+          python -m pip install -U pip wheel setuptools ninja cmake build packaging
+
+      # 7) Install PyTorch 2.8.0 + cu129
+      - name: Install PyTorch ${{ env.TORCH_VERSION }} + ${{ env.TORCH_CUDA_TAG }}
+        run: |
+          python -m pip install --index-url https://download.pytorch.org/whl/${{ env.TORCH_CUDA_TAG }} "torch==${{ env.TORCH_VERSION }}+${{ env.TORCH_CUDA_TAG }}"
+          python -c "import torch, sys; print('Torch:', torch.__version__, 'CUDA:', torch.version.cuda, 'Py:', sys.version)"
+
+      # 8) Build a cp313 win_amd64 wheel from source
+      - name: Build SageAttention wheel
+        working-directory: SageAttention
+        env:
+          # Ensure CUDA bins are in PATH for the build
+          PATH: ${{ env.CUDA_PATH }}\bin;${{ env.PATH }}
+          TORCH_CUDA_ARCH_LIST: ${{ env.TORCH_CUDA_ARCH_LIST }}
+          FORCE_CUDA: ${{ env.FORCE_CUDA }}
+          EXT_PARALLEL: ${{ env.EXT_PARALLEL }}
+          NVCC_APPEND_FLAGS: ${{ env.NVCC_APPEND_FLAGS }}
+          MAX_JOBS: ${{ env.MAX_JOBS }}
+          CMAKE_GENERATOR: ${{ env.CMAKE_GENERATOR }}
+        run: |
+          python -m build --wheel
+          Get-ChildItem dist\*.whl | % { Write-Host "Built wheel: $($_.Name)" }
+
+      # 9) Optional: add suffix to the wheel filename
+      - name: Add wheel suffix (optional)
+        if: ${{ env.EXTRA_WHEEL_SUFFIX != '' }}
+        shell: powershell
+        working-directory: SageAttention/dist
+        run: |
+          $wheels = Get-ChildItem -Filter "*.whl"
+          foreach ($w in $wheels) {
+            $new = $w.Name -replace '\.whl$', "${{ env.EXTRA_WHEEL_SUFFIX }}.whl"
+            Rename-Item -Path $w.FullName -NewName $new
+            Write-Host "Renamed: $($w.Name) -> $new"
+          }
+
+      # 10) Upload the wheel
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: sageattention-2.2-cu129-win-py313
+          path: SageAttention/dist/*.whl
+          if-no-files-found: error
