@@ -133,8 +133,23 @@ jobs:
             Write-Host "pip install raised an exception. This may mean the wheel is not published for Python $env:PYTHON_VERSION on Windows with $env:TORCH_CUDA_TAG."
           }
           Write-Host "Inspecting torch installation..."
-          python -c 'import sys, os, importlib; spec = importlib.util.find_spec("torch"); installed = bool(spec); print("Python:", sys.version.split()[0]); print("torch installed:", installed); if installed: import torch; print("Torch:", getattr(torch,"__version__","?"), "CUDA:", getattr(getattr(torch,"version",None),"cuda","unknown")); print("CUDA_HOME:", os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH") or "")'
-
+          Write-Host "Inspecting torch installation..."
+          $code = @"
+          import sys, os, importlib
+          spec = importlib.util.find_spec("torch")
+          installed = bool(spec)
+          print("Python:", sys.version.split()[0])
+          print("torch installed:", installed)
+          if installed:
+              import torch
+              print("Torch:", getattr(torch,"__version__",None))
+              print("CUDA available:", getattr(torch,"cuda",None) and torch.cuda.is_available())
+              print("CUDA version (reported by torch):", getattr(torch.version,"cuda",None))
+              print("TORCH_CUDA_ARCH_LIST env:", os.environ.get("TORCH_CUDA_ARCH_LIST"))
+              print("CUDA_HOME env:", os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH") or "")
+          "@"
+          $code | python -
+          
       - name: Export CUDA env (Windows)
         shell: pwsh
         run: |
@@ -142,9 +157,9 @@ jobs:
           $ENV:CUDA_HOME = "$ENV:CONDA_PREFIX"
           $ENV:CUDA_PATH = "$ENV:CONDA_PREFIX"
           $ENV:PATH = "$ENV:CONDA_PREFIX\Library\bin;$ENV:CONDA_PREFIX\bin;$ENV:PATH"
-          echo "CUDA_HOME=$ENV:CUDA_HOME" >> $Env:GITHUB_ENV
-          echo "CUDA_PATH=$ENV:CUDA_PATH" >> $Env:GITHUB_ENV
-          echo "PATH=$ENV:PATH" >> $Env:GITHUB_ENV
+          Add-Content -Path $Env:GITHUB_ENV -Value "CUDA_HOME=$ENV:CUDA_HOME"
+          Add-Content -Path $Env:GITHUB_ENV -Value "CUDA_PATH=$ENV:CUDA_PATH"
+          Add-Content -Path $Env:GITHUB_ENV -Value "PATH=$ENV:PATH"
           Write-Host "Exported CUDA_HOME and CUDA_PATH and updated PATH."
 
       - name: Show toolchain versions
@@ -181,7 +196,13 @@ jobs:
         run: |
           $wheels = Get-ChildItem -Filter "*.whl" -File
           foreach ($w in $wheels) {
-            $new = $w.Name -replace '\.whl$', "$env:EXTRA_WHEEL_SUFFIX.whl"
+            $new = $w.Name -replace '\.whl$', "$env:EXTRA_WHEEL_SUFFIX.wheel"
+            # If EXTRA_WHEEL_SUFFIX starts with '+', keep it; otherwise ensure dot separation
+            if ($env:EXTRA_WHEEL_SUFFIX.StartsWith("+")) {
+              $new = $w.Name -replace '\.whl$', "$env:EXTRA_WHEEL_SUFFIX.whl"
+            } else {
+              $new = $w.Name -replace '\.whl$', "$env:EXTRA_WHEEL_SUFFIX.whl"
+            }
             Rename-Item -Path $w.FullName -NewName $new -Force
             Write-Host "Renamed: $($w.Name) -> $new"
           }
