@@ -1,5 +1,4 @@
 name: Build SageAttention
-runs-on: self-hosted
 
 on:
   workflow_dispatch:
@@ -74,6 +73,7 @@ jobs:
       
       - name: Build wheel
         shell: powershell
+        runs-on: self-hosted
         run: |
           # Get-ChildItem Env:
           # (Get-WmiObject Win32_Processor).Name
