@@ -56,7 +56,7 @@ on:
 
 jobs:
   build-sageattn:
-    runs-on: windows-large
+    runs-on: windows-2022
 
     steps:
       - uses: actions/setup-python@v6
