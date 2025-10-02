@@ -1,4 +1,4 @@
-name: Build SageAttention 2.2 GPT (Windows • cu129 • Py3.13 • Torch 2.8)
+name: Build SageAttention 2.2 (Windows • cu129 • Py3.13 • Torch 2.8) GPT
 
 on:
   workflow_dispatch:
@@ -31,11 +31,11 @@ jobs:
       TORCH_VERSION: "2.8.0"
       TORCH_CUDA_TAG: "cu129"
 
-      # Ada (RTX 4090) = SM 8.9. Add +PTX if you want forward-compat PTX embedded.
+      # RTX 4090 (Ada, SM 8.9). Use "8.9+PTX" if you want forward-compat PTX.
       TORCH_CUDA_ARCH_LIST: "8.9"
       FORCE_CUDA: "1"
 
-      # Speed up compilation a bit
+      # Slightly speed up compilation
       EXT_PARALLEL: "4"
       NVCC_APPEND_FLAGS: "--threads 8"
       MAX_JOBS: "8"
@@ -44,13 +44,13 @@ jobs:
       EXTRA_WHEEL_SUFFIX: "${{ inputs.wheel_suffix }}"
 
     steps:
-      # 1) Checkout YOUR repo (for this workflow and to store artifacts)
+      # 1) Checkout your repo (workflow lives here)
       - name: Checkout current repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2) Checkout the UPSTREAM SageAttention source separately
+      # 2) Checkout the UPSTREAM SageAttention sources
       - name: Checkout SageAttention upstream
         uses: actions/checkout@v4
         with:
@@ -59,13 +59,23 @@ jobs:
           path: SageAttention
           fetch-depth: 1
 
-      # 3) Python 3.13.7
+      - name: Show tree (debug)
+        shell: bash
+        run: |
+          ls -la
+          ls -la SageAttention
+
+      # 3) Python 3.13.7 (keep pip cache but point at setup.py to avoid the error)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           check-latest: true
           cache: "pip"
+          cache-dependency-path: |
+            SageAttention/setup.py
+            SageAttention/requirements*.txt
+            SageAttention/setup.cfg
 
       # 4) CUDA 12.9.0 (adds CUDA_PATH and nvcc to PATH)
       - name: Install CUDA Toolkit ${{ env.CUDA_VERSION }}
@@ -73,7 +83,7 @@ jobs:
         with:
           cuda: ${{ env.CUDA_VERSION }}
 
-      # 5) MSVC build env (VS 2022 is on the runner)
+      # 5) MSVC (VS 2022 is preinstalled on the runner)
       - name: Set up MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
 
@@ -89,7 +99,7 @@ jobs:
       # 6) Build tooling
       - name: Upgrade build tooling
         run: |
-          python -m pip install -U pip wheel setuptools ninja cmake build packaging
+          python -m pip install -U pip setuptools wheel ninja cmake packaging
 
       # 7) Install PyTorch 2.8.0 + cu129
       - name: Install PyTorch ${{ env.TORCH_VERSION }} + ${{ env.TORCH_CUDA_TAG }}
@@ -97,11 +107,10 @@ jobs:
           python -m pip install --index-url https://download.pytorch.org/whl/${{ env.TORCH_CUDA_TAG }} "torch==${{ env.TORCH_VERSION }}+${{ env.TORCH_CUDA_TAG }}"
           python -c "import torch, sys; print('Torch:', torch.__version__, 'CUDA:', torch.version.cuda, 'Py:', sys.version)"
 
-      # 8) Build a cp313 win_amd64 wheel from source
-      - name: Build SageAttention wheel
+      # 8) Build wheel (follow upstream README -> setup.py)
+      - name: Build SageAttention wheel (cp313-win_amd64)
         working-directory: SageAttention
         env:
-          # Ensure CUDA bins are in PATH for the build
           PATH: ${{ env.CUDA_PATH }}\bin;${{ env.PATH }}
           TORCH_CUDA_ARCH_LIST: ${{ env.TORCH_CUDA_ARCH_LIST }}
           FORCE_CUDA: ${{ env.FORCE_CUDA }}
@@ -110,8 +119,8 @@ jobs:
           MAX_JOBS: ${{ env.MAX_JOBS }}
           CMAKE_GENERATOR: ${{ env.CMAKE_GENERATOR }}
         run: |
-          python -m build --wheel
-          Get-ChildItem dist\*.whl | % { Write-Host "Built wheel: $($_.Name)" }
+          python setup.py bdist_wheel
+          dir dist
 
       # 9) Optional: add suffix to the wheel filename
       - name: Add wheel suffix (optional)
@@ -126,7 +135,7 @@ jobs:
             Write-Host "Renamed: $($w.Name) -> $new"
           }
 
-      # 10) Upload the wheel
+      # 10) Upload wheels
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
