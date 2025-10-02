@@ -1,4 +1,4 @@
-name: Build SageAttention 2.2 (Windows • cu129 • Py3.13 • Torch 2.8) GPT
+name: Build SageAttention 2.2 GPT (Windows • cu129 • Py3.13 • Torch 2.8)
 
 on:
   workflow_dispatch:
@@ -31,11 +31,11 @@ jobs:
       TORCH_VERSION: "2.8.0"
       TORCH_CUDA_TAG: "cu129"
 
-      # RTX 4090 (Ada, SM 8.9). Use "8.9+PTX" if you want forward-compat PTX.
+      # RTX 4090 (Ada, SM 8.9). Use "8.9+PTX" if you want forward-compat PTX embedded.
       TORCH_CUDA_ARCH_LIST: "8.9"
       FORCE_CUDA: "1"
 
-      # Slightly speed up compilation
+      # Build parallelism (Windows/MSVC)
       EXT_PARALLEL: "4"
       NVCC_APPEND_FLAGS: "--threads 8"
       MAX_JOBS: "8"
@@ -65,23 +65,35 @@ jobs:
           ls -la
           ls -la SageAttention
 
-      # 3) Python 3.13.7 (keep pip cache but point at setup.py to avoid the error)
+      # 3) Python 3.13.7 (keep pip cache but point to files that exist to avoid cache errors)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           check-latest: true
-          cache: "pip"
+          cache: pip
           cache-dependency-path: |
             SageAttention/setup.py
             SageAttention/requirements*.txt
             SageAttention/setup.cfg
 
       # 4) CUDA 12.9.0 (adds CUDA_PATH and nvcc to PATH)
+      #    FIX: disable action caches (to avoid "Path Validation Error") and use network method on Windows
       - name: Install CUDA Toolkit ${{ env.CUDA_VERSION }}
         uses: Jimver/cuda-toolkit@v0.2.25
         with:
           cuda: ${{ env.CUDA_VERSION }}
+          use-github-cache: false
+          use-local-cache: false
+          method: network
+          log-file-suffix: log.txt
+
+      - name: Verify CUDA env
+        shell: powershell
+        run: |
+          Write-Host "CUDA_PATH=$Env:CUDA_PATH"
+          $env:Path = "$Env:CUDA_PATH\bin;$Env:Path"
+          nvcc --version
 
       # 5) MSVC (VS 2022 is preinstalled on the runner)
       - name: Set up MSVC Developer Command Prompt
@@ -91,9 +103,7 @@ jobs:
         shell: powershell
         run: |
           python --version
-          nvcc --version
           cl 2>$null | Select-Object -First 1
-          echo "CUDA_PATH=$Env:CUDA_PATH"
           echo "TORCH_CUDA_ARCH_LIST=$Env:TORCH_CUDA_ARCH_LIST"
 
       # 6) Build tooling
@@ -107,7 +117,7 @@ jobs:
           python -m pip install --index-url https://download.pytorch.org/whl/${{ env.TORCH_CUDA_TAG }} "torch==${{ env.TORCH_VERSION }}+${{ env.TORCH_CUDA_TAG }}"
           python -c "import torch, sys; print('Torch:', torch.__version__, 'CUDA:', torch.version.cuda, 'Py:', sys.version)"
 
-      # 8) Build wheel (follow upstream README -> setup.py)
+      # 8) Build wheel (upstream uses setup.py; produce cp313-win_amd64 wheel)
       - name: Build SageAttention wheel (cp313-win_amd64)
         working-directory: SageAttention
         env:
@@ -135,7 +145,7 @@ jobs:
             Write-Host "Renamed: $($w.Name) -> $new"
           }
 
-      # 10) Upload wheels
+      # 10) Upload the wheel
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
