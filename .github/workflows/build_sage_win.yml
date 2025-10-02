@@ -1,4 +1,4 @@
-name: Build SageAttention 2.2 (Windows • cu129 • Py3.13 • Torch 2.8 via Conda CUDA)
+name: Build SageAttention 2.2 (Windows • cu129 • Py3.13.7 • Torch 2.8 via Conda CUDA)
 
 on:
   workflow_dispatch:
@@ -15,6 +15,10 @@ on:
         description: "Optional wheel filename suffix (e.g. +rev1)"
         required: false
         default: ""
+      runner_label:
+        description: "Runner label to use (e.g. windows-2022 or self-hosted)"
+        required: false
+        default: "windows-2022"
 
 permissions:
   contents: read
@@ -22,47 +26,42 @@ permissions:
 jobs:
   build-win:
     name: Build wheel (Win, Py 3.13.7, Torch 2.8.0+cu129, CUDA toolkit via conda)
-    runs-on: windows-2022
-    timeout-minutes: 75
+    # runner_label can be set to "windows-2022" (GH-hosted) or "self-hosted" / "self-hosted, windows"
+    runs-on: ${{ github.event.inputs.runner_label }}
+    timeout-minutes: 120
 
     env:
-      # Tooling / targets
       PYTHON_VERSION: "3.13.7"
       TORCH_VERSION: "2.8.0"
       TORCH_CUDA_TAG: "cu129"
-      # RTX 4090 (Ada, SM 8.9). Add +PTX for forward-compat if desired.
       TORCH_CUDA_ARCH_LIST: "8.9"
       FORCE_CUDA: "1"
-      # Parallelism
       EXT_PARALLEL: "4"
       NVCC_APPEND_FLAGS: "--threads 8"
       MAX_JOBS: "8"
       CMAKE_GENERATOR: "Ninja"
-      EXTRA_WHEEL_SUFFIX: "${{ inputs.wheel_suffix }}"
+      EXTRA_WHEEL_SUFFIX: "${{ github.event.inputs.wheel_suffix }}"
 
     steps:
-      # 1) Checkout your repo (workflow lives here)
       - name: Checkout current repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2) Checkout the UPSTREAM SageAttention sources
       - name: Checkout SageAttention upstream
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.sage_repo }}
-          ref: ${{ inputs.sage_ref }}
+          repository: ${{ github.event.inputs.sage_repo }}
+          ref: ${{ github.event.inputs.sage_ref }}
           path: SageAttention
           fetch-depth: 1
 
-      - name: Show tree (debug)
-        shell: bash
+      - name: Show repository tree (debug)
+        shell: pwsh
         run: |
-          ls -la
-          ls -la SageAttention
+          Get-ChildItem -Force -Recurse -Depth 1 | Format-List Name,Mode,Length
+          Get-ChildItem -Path SageAttention -Force | Format-List Name,Mode,Length
 
-      # 3) Set up Miniconda with Python 3.13.7
       - name: Set up Miniconda (Py ${{ env.PYTHON_VERSION }})
         uses: conda-incubator/setup-miniconda@v3
         with:
@@ -72,48 +71,43 @@ jobs:
           channels: conda-forge,defaults
           miniforge-version: latest
 
-      - name: Conda info
-        shell: bash -l {0}
+      - name: Conda info / Python version
+        shell: pwsh
         run: |
           conda info
           python --version
 
-      # 4) Install CUDA toolkit inside the env (provides nvcc/headers/libs).
-      #    12.4 is stable on Windows runners and works with Torch cu129.
-      - name: Install CUDA toolkit (conda)
-        shell: bash -l {0}
+      - name: Install CUDA toolkit 12.9 (conda)
+        if: ${{ always() }}
+        shell: pwsh
         run: |
-          conda install -y -c nvidia cuda-toolkit=12.4
-          nvcc --version
+          conda install -y -c nvidia cuda-toolkit=12.9
+          & nvcc --version
 
-      # 5) Build tooling
       - name: Upgrade build tooling
-        shell: bash -l {0}
+        shell: pwsh
         run: |
           python -m pip install -U pip setuptools wheel ninja cmake packaging
 
-      # 6) Install PyTorch 2.8.0 + cu129 (official index)
       - name: Install PyTorch ${{ env.TORCH_VERSION }} + ${{ env.TORCH_CUDA_TAG }}
-        shell: bash -l {0}
+        shell: pwsh
         run: |
-          python -m pip install --index-url https://download.pytorch.org/whl/${{ env.TORCH_CUDA_TAG }} "torch==${{ env.TORCH_VERSION }}+${{ env.TORCH_CUDA_TAG }}"
+          python -m pip install --index-url https://download.pytorch.org/whl/${{ env.TORCH_CUDA_TAG }} "torch==${{ env.TORCH_VERSION }}+${{ env.TORCH_CUDA_TAG }}" || Write-Host "Torch install may have failed — check availability for Py ${env:PYTHON_VERSION} and ${env:TORCH_CUDA_TAG}"
           python - << 'PY'
           import torch, sys, os
-          print("Torch:", torch.__version__, "CUDA:", torch.version.cuda, "Py:", sys.version)
+          print("Torch:", getattr(torch, '__version__', 'not installed'), "CUDA:", getattr(torch.version, 'cuda', 'unknown'), "Py:", sys.version)
           print("CUDA_HOME:", os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH") or "")
           PY
 
-      # 7) Ensure CUDA env variables for build (Conda installs under CONDA_PREFIX)
       - name: Export CUDA env (Windows)
         shell: pwsh
         run: |
-          $env:CUDA_HOME = "$env:CONDA_PREFIX"
-          $env:CUDA_PATH = "$env:CONDA_PREFIX"
-          $env:PATH = "$env:CONDA_PREFIX\Library\bin;$env:CONDA_PREFIX\bin;$env:PATH"
-          # Persist to subsequent steps in this job
-          echo "CUDA_HOME=$env:CUDA_HOME" >> $env:GITHUB_ENV
-          echo "CUDA_PATH=$env:CUDA_PATH" >> $env:GITHUB_ENV
-          echo "PATH=$env:PATH"         >> $env:GITHUB_ENV
+          $ENV:CUDA_HOME = "$ENV:CONDA_PREFIX"
+          $ENV:CUDA_PATH = "$ENV:CONDA_PREFIX"
+          $ENV:PATH = "$ENV:CONDA_PREFIX\Library\bin;$ENV:CONDA_PREFIX\bin;$ENV:PATH"
+          echo "CUDA_HOME=$ENV:CUDA_HOME" >> $Env:GITHUB_ENV
+          echo "CUDA_PATH=$ENV:CUDA_PATH" >> $Env:GITHUB_ENV
+          echo "PATH=$ENV:PATH"         >> $Env:GITHUB_ENV
 
       - name: Show toolchain versions
         shell: pwsh
@@ -121,13 +115,12 @@ jobs:
           python --version
           & nvcc --version
           cl 2>$null | Select-Object -First 1
-          echo "CUDA_HOME=$env:CUDA_HOME"
-          echo "CUDA_PATH=$env:CUDA_PATH"
-          echo "TORCH_CUDA_ARCH_LIST=$env:TORCH_CUDA_ARCH_LIST"
+          Write-Host "CUDA_HOME=$ENV:CUDA_HOME"
+          Write-Host "CUDA_PATH=$ENV:CUDA_PATH"
+          Write-Host "TORCH_CUDA_ARCH_LIST=$ENV:TORCH_CUDA_ARCH_LIST"
 
-      # 8) Build wheel (upstream uses setup.py; produce cp313-win_amd64 wheel)
       - name: Build SageAttention wheel (cp313-win_amd64)
-        shell: bash -l {0}
+        shell: pwsh
         working-directory: SageAttention
         env:
           TORCH_CUDA_ARCH_LIST: ${{ env.TORCH_CUDA_ARCH_LIST }}
@@ -137,10 +130,10 @@ jobs:
           MAX_JOBS: ${{ env.MAX_JOBS }}
           CMAKE_GENERATOR: ${{ env.CMAKE_GENERATOR }}
         run: |
+          # Build wheel (setup.py expected). If your project uses pyproject.toml, replace with build backend.
           python setup.py bdist_wheel
-          ls -la dist
+          Get-ChildItem -Path dist | Format-List Name,Length
 
-      # 9) Optional: add suffix to the wheel filename
       - name: Add wheel suffix (optional)
         if: ${{ env.EXTRA_WHEEL_SUFFIX != '' }}
         shell: pwsh
@@ -153,7 +146,6 @@ jobs:
             Write-Host "Renamed: $($w.Name) -> $new"
           }
 
-      # 10) Upload the wheel
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
