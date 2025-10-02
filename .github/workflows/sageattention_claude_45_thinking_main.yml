@@ -1,4 +1,4 @@
-name: Build SageAttention
+name: CLAUDE Build SageAttention
 
 on:
   workflow_dispatch:
