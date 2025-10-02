@@ -1,109 +1,191 @@
-name: DEEPSEEK Build SageAttention 2.2 
+name: Build SageAttention 2.2 (Windows • cu129 • Py3.13.7 • Torch 2.8 via Conda CUDA)
 
 on:
   workflow_dispatch:
     inputs:
-      git_tag:
-        description: Git tag
-        required: true
-        type: string
-        default: v2.2
-      torch_minor:
-        description: PyTorch minor version
-        required: true
-        type: string
-        default: '8'
-      torch_patch:
-        description: PyTorch patch version
-        required: true
-        type: string
-        default: '0'
-      torch_is_nightly:
-        description: PyTorch is nightly
-        required: true
-        type: string
-        default: '0'
-      cuda_major:
-        description: CUDA major version
-        required: true
-        type: string
-        default: '12'
-      cuda_minor:
-        description: CUDA minor version
-        required: true
-        type: string
-        default: '9'
-      cuda_patch:
-        description: CUDA patch version
-        required: true
-        type: string
-        default: '0'
-      extra_cuda_arch:
-        description: Extra CUDA arch
+      sage_repo:
+        description: "Upstream SageAttention repository"
         required: false
-        type: string
-        default: '8.9'
-      extra_wheel_version_suffix:
-        description: Extra wheel version suffix
+        default: "thu-ml/SageAttention"
+      sage_ref:
+        description: "Ref in upstream repo (branch/tag/sha). Use 'main' for 2.2 code."
         required: false
-        type: string
-        default: ''
-      is_python_abi3:
-        description: Is Python ABI3
+        default: "main"
+      wheel_suffix:
+        description: "Optional wheel filename suffix (e.g. +rev1)"
         required: false
-        type: string
-        default: ''
+        default: ""
+
+permissions:
+  contents: read
 
 jobs:
-  build-sageattn:
-    runs-on: windows-large
+  build-win:
+    name: Build wheel (self-hosted Win11 • RTX 4090 • Py 3.13.7 • Torch 2.8.0+cu129)
+    runs-on: [self-hosted, windows, win11, gpu, gpu-4090]
+    timeout-minutes: 180
+
+    env:
+      PYTHON_VERSION: "3.13.7"
+      TORCH_VERSION: "2.8.0"
+      TORCH_CUDA_TAG: "cu129"
+      TORCH_CUDA_ARCH_LIST: "8.9"
+      FORCE_CUDA: "1"
+      EXT_PARALLEL: "4"
+      NVCC_APPEND_FLAGS: "--threads 8"
+      MAX_JOBS: "8"
+      CMAKE_GENERATOR: "Ninja"
+      EXTRA_WHEEL_SUFFIX: "${{ github.event.inputs.wheel_suffix }}"
+
     steps:
-      - uses: actions/setup-python@v6
+      - name: Checkout current repo
+        uses: actions/checkout@v4
         with:
-          python-version: '3.13'
+          fetch-depth: 0
 
-      - uses: N-Storm/cuda-toolkit@v0.2.28
+      - name: Checkout SageAttention upstream
+        uses: actions/checkout@v4
         with:
-          cuda: ${{ inputs.cuda_major }}.${{ inputs.cuda_minor }}.${{ inputs.cuda_patch }}
-          use-github-cache: false
+          repository: "${{ github.event.inputs.sage_repo }}"
+          ref: "${{ github.event.inputs.sage_ref }}"
+          path: SageAttention
+          fetch-depth: 1
 
-      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Show repository tree (debug)
+        shell: pwsh
+        run: |
+          Write-Host "Repository root files:"
+          Get-ChildItem -Force -Path . | Select-Object Name,Mode,Length
+          if (Test-Path -Path SageAttention) {
+            Write-Host "SageAttention directory files:"
+            Get-ChildItem -Force -Path SageAttention | Select-Object Name,Mode,Length
+          } else {
+            Write-Host "SageAttention directory not present"
+          }
 
-      - name: Build wheel
-        shell: powershell
-        runs-on: [self-hosted, windows]
-          python -m pip install --upgrade pip
-          pip install --upgrade cibuildwheel simpleindex
-
-          git config --global core.autocrlf false
-          git clone --branch ${{ inputs.git_tag }} --depth 1 https://github.com/woct0rdho/SageAttention.git
-          cd SageAttention
-          git rev-parse HEAD
-
-          $Env:CUDA_MAJOR_VERSION = "${{ inputs.cuda_major }}"
-          $Env:CUDA_MINOR_VERSION = "${{ inputs.cuda_minor }}"
-          $Env:TORCH_MINOR_VERSION = "${{ inputs.torch_minor }}"
-          $Env:TORCH_PATCH_VERSION = "${{ inputs.torch_patch }}"
-          $Env:TORCH_IS_NIGHTLY = "${{ inputs.torch_is_nightly }}"
-          python update_pyproject.py
-
-          Start-Process -NoNewWindow simpleindex simpleindex.toml
-          $Env:PIP_INDEX_URL = "http://127.0.0.1:8000"
-
-          $Env:DISTUTILS_USE_SDK = "1"
-          # RTX 4090 requires 8.9 architecture + future compatibility
-          $Env:TORCH_CUDA_ARCH_LIST = "8.0 8.6 8.9 9.0 12.0 "
-          $Env:TORCH_CUDA_ARCH_LIST += "${{ inputs.extra_cuda_arch }}"
-          
-          $Env:SAGEATTENTION_WHEEL_VERSION_SUFFIX = "+cu${{ inputs.cuda_major }}${{ inputs.cuda_minor }}torch2.${{ inputs.torch_minor }}.${{ inputs.torch_patch }}"
-          $Env:SAGEATTENTION_WHEEL_VERSION_SUFFIX += "${{ inputs.extra_wheel_version_suffix }}"
-          
-          # Build for Python 3.13 and compatible versions
-          $Env:CIBW_BUILD = "cp313-win_amd64"
-          $Env:CIBW_BUILD_VERBOSITY = "1"
-          
-          cibuildwheel .
-
-      - uses: actions/upload-artifact@v4
+      - name: Set up Miniconda (Py ${{ env.PYTHON_VERSION }})
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          path: SageAttention/wheelhouse/*
+          auto-update-conda: true
+          activate-environment: buildenv
+          python-version: "${{ env.PYTHON_VERSION }}"
+          channels: "conda-forge,defaults"
+          miniforge-version: "latest"
+
+      - name: Conda info / Python version
+        shell: pwsh
+        run: |
+          conda info
+          python --version
+
+      - name: Check GPU and CUDA toolchain on runner
+        shell: pwsh
+        run: |
+          Write-Host "Checking NVIDIA tools and drivers..."
+          if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+            Write-Host "nvidia-smi available:"
+            nvidia-smi
+          } else {
+            Write-Host "nvidia-smi not found in PATH. Ensure NVIDIA drivers are installed on the runner."
+          }
+          if (Get-Command nvcc -ErrorAction SilentlyContinue) {
+            Write-Host "nvcc found:"
+            nvcc --version
+            $nvccPresent = $true
+          } else {
+            Write-Host "nvcc not found. Will try to install cuda-toolkit via conda in the next step (if desired)."
+            $nvccPresent = $false
+          }
+          # Expose detection result for next step
+          if ($nvccPresent) { Write-Output "NVCC_PRESENT=1" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append } else { Write-Output "NVCC_PRESENT=0" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append }
+
+      - name: Install CUDA toolkit 12.9 (conda) if nvcc missing
+        shell: pwsh
+        if: env.NVCC_PRESENT == '0'
+        run: |
+          Write-Host "nvcc not present; attempting to install cuda-toolkit=12.9 from nvidia channel via conda..."
+          conda install -y -c nvidia cuda-toolkit=12.9
+          if (Get-Command nvcc -ErrorAction SilentlyContinue) {
+            Write-Host "nvcc installed successfully:"
+            nvcc --version
+          } else {
+            Write-Host "WARNING: nvcc still not found after conda install. You may need to install CUDA toolkit or ensure CONDA_PREFIX\Library\bin is in PATH."
+          }
+
+      - name: Upgrade build tooling
+        shell: pwsh
+        run: |
+          python -m pip install -U pip setuptools wheel ninja cmake packaging
+
+      - name: Install PyTorch ${{ env.TORCH_VERSION }} + ${{ env.TORCH_CUDA_TAG }}
+        shell: pwsh
+        run: |
+          Write-Host "Attempting to install torch ${env:TORCH_VERSION}+${env:TORCH_CUDA_TAG} from PyTorch index..."
+          $pkg = "torch==${{ env.TORCH_VERSION }}+${{ env.TORCH_CUDA_TAG }}"
+          try {
+            python -m pip install --index-url https://download.pytorch.org/whl/${{ env.TORCH_CUDA_TAG }} $pkg -v
+            Write-Host "pip exit code: $LASTEXITCODE"
+          } catch {
+            Write-Host "pip install raised an exception. This may mean the wheel is not published for Python ${env:PYTHON_VERSION} on Windows with ${env:TORCH_CUDA_TAG}."
+          }
+          Write-Host "Inspecting torch installation..."
+          python -c "import sys, os; import importlib; spec = importlib.util.find_spec('torch'); installed = bool(spec); print('Python:', sys.version.split()[0]); print('torch installed:', installed); \
+if installed: import torch; print('Torch:', getattr(torch,'__version__','?'), 'CUDA:', getattr(getattr(torch,'version',None),'cuda','unknown')); print('CUDA_HOME:', os.environ.get('CUDA_HOME') or os.environ.get('CUDA_PATH') or '')"
+
+      - name: Export CUDA env (Windows)
+        shell: pwsh
+        run: |
+          # Conda installs CUDA under CONDA_PREFIX; add to environment for builds
+          $ENV:CUDA_HOME = "$ENV:CONDA_PREFIX"
+          $ENV:CUDA_PATH = "$ENV:CONDA_PREFIX"
+          $ENV:PATH = "$ENV:CONDA_PREFIX\Library\bin;$ENV:CONDA_PREFIX\bin;$ENV:PATH"
+          Add-Content -Path $Env:GITHUB_ENV -Value "CUDA_HOME=$ENV:CUDA_HOME"
+          Add-Content -Path $Env:GITHUB_ENV -Value "CUDA_PATH=$ENV:CUDA_PATH"
+          Add-Content -Path $Env:GITHUB_ENV -Value "PATH=$ENV:PATH"
+          Write-Host "Exported CUDA_HOME and CUDA_PATH and updated PATH."
+
+      - name: Show toolchain versions
+        shell: pwsh
+        run: |
+          python --version
+          if (Get-Command nvcc -ErrorAction SilentlyContinue) { nvcc --version } else { Write-Host "nvcc: not found" }
+          if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) { nvidia-smi } else { Write-Host "nvidia-smi: not found" }
+          if (Get-Command cl -ErrorAction SilentlyContinue) { cl | Select-Object -First 1 } else { Write-Host "cl (MSVC) not found; ensure Visual Studio + Desktop development workload is installed" }
+          Write-Host "CUDA_HOME=$ENV:CUDA_HOME"
+          Write-Host "CUDA_PATH=$ENV:CUDA_PATH"
+          Write-Host "TORCH_CUDA_ARCH_LIST=$ENV:TORCH_CUDA_ARCH_LIST"
+
+      - name: Build SageAttention wheel (cp313-win_amd64)
+        shell: pwsh
+        working-directory: SageAttention
+        env:
+          TORCH_CUDA_ARCH_LIST: "${{ env.TORCH_CUDA_ARCH_LIST }}"
+          FORCE_CUDA: "${{ env.FORCE_CUDA }}"
+          EXT_PARALLEL: "${{ env.EXT_PARALLEL }}"
+          NVCC_APPEND_FLAGS: "${{ env.NVCC_APPEND_FLAGS }}"
+          MAX_JOBS: "${{ env.MAX_JOBS }}"
+          CMAKE_GENERATOR: "${{ env.CMAKE_GENERATOR }}"
+        run: |
+          Write-Host "Building wheel (setup.py bdist_wheel assumed). If project uses pyproject.toml, update this step."
+          python setup.py bdist_wheel
+          Write-Host "dist contents:"
+          Get-ChildItem -Path dist | Select-Object Name,Length
+
+      - name: Add wheel suffix (optional)
+        if: ${{ env.EXTRA_WHEEL_SUFFIX != '' }}
+        shell: pwsh
+        working-directory: SageAttention/dist
+        run: |
+          $wheels = Get-ChildItem -Filter "*.whl" -File
+          foreach ($w in $wheels) {
+            $new = $w.Name -replace '\.whl$', "${{ env.EXTRA_WHEEL_SUFFIX }}.whl"
+            Rename-Item -Path $w.FullName -NewName $new -Force
+            Write-Host "Renamed: $($w.Name) -> $new"
+          }
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: sageattention-2.2-cu129-win-py313-4090
+          path: SageAttention/dist/*.whl
+          if-no-files-found: error
